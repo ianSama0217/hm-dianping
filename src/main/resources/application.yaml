@@ -1,28 +1,24 @@
 server:
   port: 8081
+
 spring:
   application:
-    name: hmdp
+    name: demo-app
+
   datasource:
-    driver-class-name: com.mysql.jdbc.Driver
-    url: jdbc:mysql://127.0.0.1:3306/hmdp?useSSL=false&serverTimezone=UTC
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://127.0.0.1:3306/demo?useSSL=false&serverTimezone=UTC
     username: root
     password: root
-redis:
-  host: "172.29.2.2"
-  port: 6379
-  password: "890217"
-  lettuce:
-    pool:
-      max-active: 8
-      max-idle: 8
-      min-idle: 0
-      max-wait: 100ms
-  time-between-eviction-runs: 10s
-jackson:
-  default-property-inclusion: non_null # JSON处理时忽略非空字段
-mybatis-plus:
-  type-aliases-package: com.hmdp.entity # 别名扫描包
-logging:
-  level:
-    com.hmdp: debug
+
+  redis:
+    host: 172.29.2.2 # Redis 伺服器地址
+    port: 6379 # Redis 端口
+    password: "890217" # Redis 密碼（如果無密碼可刪掉這行）
+    timeout: 6000ms # 連線超時
+    lettuce:
+      pool:
+        max-active: 8 # 連線池最大連線數
+        max-idle: 8 # 最大空閒連線數
+        min-idle: 0 # 最小空閒連線數
+        max-wait: 100ms # 連線池阻塞最大等待時間
