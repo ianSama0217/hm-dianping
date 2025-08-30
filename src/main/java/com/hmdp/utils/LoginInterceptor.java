@@ -6,7 +6,7 @@ import javax.servlet.http.HttpSession;
 
 import org.springframework.web.servlet.HandlerInterceptor;
 
-import com.hmdp.entity.User;
+import com.hmdp.dto.UserDTO;
 
 public class LoginInterceptor implements HandlerInterceptor {
 
@@ -27,7 +27,7 @@ public class LoginInterceptor implements HandlerInterceptor {
         }
 
         // 已登入，將用戶信息存入 ThreadLocal
-        UserHolder.saveUser((User) user);
+        UserHolder.saveUser((UserDTO) user);
 
         return true;
     }
