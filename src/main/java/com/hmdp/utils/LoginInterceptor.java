@@ -1,33 +1,57 @@
 package com.hmdp.utils;
 
+import java.util.Map;
+import java.util.concurrent.TimeUnit;
+
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
-import javax.servlet.http.HttpSession;
 
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.web.servlet.HandlerInterceptor;
 
 import com.hmdp.dto.UserDTO;
 
+import cn.hutool.core.bean.BeanUtil;
+
 public class LoginInterceptor implements HandlerInterceptor {
+
+    private StringRedisTemplate stringRedisTemplate;
+
+    public LoginInterceptor(StringRedisTemplate stringRedisTemplate) {
+        this.stringRedisTemplate = stringRedisTemplate;
+    }
 
     @Override
     public boolean preHandle(HttpServletRequest request,
             HttpServletResponse response, Object handler) throws Exception {
-        // 取得 session
-        HttpSession session = request.getSession();
-
-        // 取得 session 中的用戶
-        Object user = session.getAttribute("user");
-
-        // 判斷用戶是否存在
-        if (user == null) {
+        // 取得請求header的token
+        String token = request.getHeader("authorization");
+        if (token.isBlank()) {
             // 未登入，返回 401 狀態碼
             response.setStatus(401);
             return false;
         }
 
+        // 使用token取得redis中的用戶
+        String key = RedisConstants.LOGIN_USER_KEY + token;
+        Map<Object, Object> userMap = stringRedisTemplate.opsForHash()
+                .entries(key);
+
+        // 判斷用戶是否存在
+        if (userMap.isEmpty()) {
+            // 未登入，返回 401 狀態碼
+            response.setStatus(401);
+            return false;
+        }
+
+        // 將查詢到hash資料轉換成userDTO
+        UserDTO userDTO = BeanUtil.fillBeanWithMap(userMap, new UserDTO(), false);
+
         // 已登入，將用戶信息存入 ThreadLocal
-        UserHolder.saveUser((UserDTO) user);
+        UserHolder.saveUser(userDTO);
+
+        // 刷新token有效期
+        stringRedisTemplate.expire(key, RedisConstants.LOGIN_USER_TTL, TimeUnit.MINUTES);
 
         return true;
     }
