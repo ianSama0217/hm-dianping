@@ -44,9 +44,16 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
             return Result.ok(shop);
         }
 
+        // 判斷查詢到的是否是空字串
+        if (shopJson != null) {
+            return Result.fail("店鋪不存在");
+        }
+
         // 緩存不存在, 根據id查詢mySQL
         Shop shop = getById(id);
         if (shop == null) {
+            stringRedisTemplate.opsForValue().set(key, "", RedisConstants.CACHE_NULL_TTL,
+                    TimeUnit.MINUTES);
             return Result.fail("店鋪不存在");
         }
 
