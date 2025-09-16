@@ -61,7 +61,9 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
         // 檢查庫存是否充足，減庫存
         boolean success = seckillVoucherService.update()
                 .setSql("stock = stock - 1")
-                .eq("voucher_id", voucherId).update();
+                .eq("voucher_id", voucherId)
+                // 樂觀鎖 (CAS)
+                .gt("stock", voucher.getStock()).update();
 
         if (!success) {
             return Result.fail("庫存不足");
