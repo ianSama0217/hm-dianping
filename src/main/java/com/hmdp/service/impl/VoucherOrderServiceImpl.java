@@ -2,7 +2,7 @@ package com.hmdp.service.impl;
 
 import com.hmdp.dto.Result;
 import com.hmdp.entity.SeckillVoucher;
-import com.hmdp.entity.User;
+
 import com.hmdp.entity.VoucherOrder;
 import com.hmdp.mapper.VoucherOrderMapper;
 import com.hmdp.service.ISeckillVoucherService;
@@ -15,8 +15,9 @@ import java.time.LocalDateTime;
 
 import javax.annotation.Resource;
 
-import org.apache.tomcat.jni.Local;
+import org.springframework.aop.framework.AopContext;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * <p>
@@ -57,13 +58,36 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
             return Result.fail("庫存不足");
         }
 
+        Long userId = UserHolder.getUser().getId();
+
+        synchronized (userId.toString().intern()) {
+            // 獲取代理對象
+            IVoucherOrderService proxy = (IVoucherOrderService) AopContext.currentProxy();
+            // 返回訂單id
+            return proxy.createVoucherOrder(voucherId);
+        }
+    }
+
+    @Transactional
+    public Result createVoucherOrder(Long voucherId) {
+        // 一人一單
+        Long userId = UserHolder.getUser().getId();
+
+        // 查詢訂單
+        int count = query().eq("user_id", userId).eq("voucher_id", voucherId).count();
+        // 判斷是否存在
+        if (count > 0) {
+            // 已存在，不能重複購買
+            return Result.fail("用戶已購買過一次");
+        }
+
         // 下單
         // 檢查庫存是否充足，減庫存
         boolean success = seckillVoucherService.update()
                 .setSql("stock = stock - 1")
                 .eq("voucher_id", voucherId)
                 // 樂觀鎖 (CAS)
-                .gt("stock", voucher.getStock()).update();
+                .gt("stock", 0).update();
 
         if (!success) {
             return Result.fail("庫存不足");
@@ -73,13 +97,11 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
         long orderId = redisIdWorker.nextId("order");
         voucherOrder.setId(orderId);
 
-        Long userId = UserHolder.getUser().getId();
         voucherOrder.setUserId(userId);
 
         voucherOrder.setVoucherId(voucherId);
         save(voucherOrder);
 
-        // 返回訂單id
         return Result.ok(orderId);
     }
 
