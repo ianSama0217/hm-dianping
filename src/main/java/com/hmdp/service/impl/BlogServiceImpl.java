@@ -6,7 +6,12 @@ import com.hmdp.entity.User;
 import com.hmdp.mapper.BlogMapper;
 import com.hmdp.service.IBlogService;
 import com.hmdp.service.IUserService;
+import com.hmdp.utils.RedisConstants;
 import com.hmdp.utils.SystemConstants;
+import com.hmdp.utils.UserHolder;
+
+import cn.hutool.core.util.BooleanUtil;
+
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 
@@ -14,6 +19,7 @@ import java.util.List;
 
 import javax.annotation.Resource;
 
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
 /**
@@ -29,6 +35,9 @@ public class BlogServiceImpl extends ServiceImpl<BlogMapper, Blog> implements IB
 
     @Resource
     private IUserService userService;
+
+    @Resource
+    private StringRedisTemplate stringRedisTemplate;
 
     @Override
     public Result queryHotBlog(Integer current) {
@@ -59,11 +68,39 @@ public class BlogServiceImpl extends ServiceImpl<BlogMapper, Blog> implements IB
         return Result.ok(blog);
     }
 
+    @Override
+    public Result likeBlog(Long id) {
+        // 取得登錄用戶
+        Long userId = UserHolder.getUser().getId();
+
+        // 判斷是否點讚
+        String key = RedisConstants.BLOG_LIKED_KEY + id;
+        Boolean isMember = stringRedisTemplate.opsForSet().isMember(key, userId.toString());
+
+        if (BooleanUtil.isFalse(isMember)) {
+            // 沒點讚, 點讚數+1, 加到redis set
+            boolean isSeccuss = update().setSql("liked = liked + 1").eq("id", id).update();
+
+            if (isSeccuss) {
+                stringRedisTemplate.opsForSet().add(key, userId.toString());
+            }
+
+        } else {
+            // 已點讚, 點讚數-1, 從redis set移除
+            boolean isSeccuss = update().setSql("liked = liked - 1").eq("id", id).update();
+
+            if (isSeccuss) {
+                stringRedisTemplate.opsForSet().remove(key, userId.toString());
+            }
+        }
+
+        return Result.ok();
+    }
+
     private void queryBlogUser(Blog blog) {
         Long userId = blog.getUserId();
         User user = userService.getById(userId);
         blog.setName(user.getNickName());
         blog.setIcon(user.getIcon());
     }
-
 }
