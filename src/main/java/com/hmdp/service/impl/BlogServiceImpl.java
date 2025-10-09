@@ -10,8 +10,6 @@ import com.hmdp.utils.RedisConstants;
 import com.hmdp.utils.SystemConstants;
 import com.hmdp.utils.UserHolder;
 
-import cn.hutool.core.util.BooleanUtil;
-
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 
@@ -83,22 +81,22 @@ public class BlogServiceImpl extends ServiceImpl<BlogMapper, Blog> implements IB
 
         // 判斷是否點讚
         String key = RedisConstants.BLOG_LIKED_KEY + id;
-        Boolean isMember = stringRedisTemplate.opsForSet().isMember(key, userId.toString());
+        Double score = stringRedisTemplate.opsForZSet().score(key, userId.toString());
 
-        if (BooleanUtil.isFalse(isMember)) {
-            // 沒點讚, 點讚數+1, 加到redis set
+        if (score == null) {
+            // 沒點讚, 點讚數+1, 加到redis sorted set
             boolean isSeccuss = update().setSql("liked = liked + 1").eq("id", id).update();
 
             if (isSeccuss) {
-                stringRedisTemplate.opsForSet().add(key, userId.toString());
+                stringRedisTemplate.opsForZSet().add(key, userId.toString(), System.currentTimeMillis());
             }
 
         } else {
-            // 已點讚, 點讚數-1, 從redis set移除
+            // 已點讚, 點讚數-1, 從redis sorted set移除
             boolean isSeccuss = update().setSql("liked = liked - 1").eq("id", id).update();
 
             if (isSeccuss) {
-                stringRedisTemplate.opsForSet().remove(key, userId.toString());
+                stringRedisTemplate.opsForZSet().remove(key, userId.toString());
             }
         }
 
@@ -116,7 +114,7 @@ public class BlogServiceImpl extends ServiceImpl<BlogMapper, Blog> implements IB
         // 取得登錄用戶
         Long userId = UserHolder.getUser().getId();
         String key = RedisConstants.BLOG_LIKED_KEY + blog.getId();
-        Boolean isMember = stringRedisTemplate.opsForSet().isMember(key, userId.toString());
-        blog.setIsLike(BooleanUtil.isTrue(isMember));
+        Double score = stringRedisTemplate.opsForZSet().score(key, userId.toString());
+        blog.setIsLike(score != null);
     }
 }
