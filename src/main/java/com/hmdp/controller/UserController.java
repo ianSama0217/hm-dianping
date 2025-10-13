@@ -90,7 +90,7 @@ public class UserController {
     }
 
     @GetMapping("{id}")
-    public Result getMethodName(@PathVariable("id") Long userId) {
+    public Result queryUserById(@PathVariable("id") Long userId) {
         User user = userService.getById(userId);
         if (user == null) {
             return Result.ok();
