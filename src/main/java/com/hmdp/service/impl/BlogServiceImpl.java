@@ -1,6 +1,7 @@
 package com.hmdp.service.impl;
 
 import com.hmdp.dto.Result;
+import com.hmdp.dto.ScrollResult;
 import com.hmdp.dto.UserDTO;
 import com.hmdp.entity.Blog;
 import com.hmdp.entity.Follow;
@@ -19,6 +20,7 @@ import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -26,6 +28,7 @@ import java.util.stream.Collectors;
 import javax.annotation.Resource;
 
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.ZSetOperations.TypedTuple;
 import org.springframework.stereotype.Service;
 
 /**
@@ -138,25 +141,6 @@ public class BlogServiceImpl extends ServiceImpl<BlogMapper, Blog> implements IB
         return Result.ok(userDTOS);
     }
 
-    private void queryBlogUser(Blog blog) {
-        Long userId = blog.getUserId();
-        User user = userService.getById(userId);
-        blog.setName(user.getNickName());
-        blog.setIcon(user.getIcon());
-    }
-
-    private void isBlogLiked(Blog blog) {
-        // 取得登錄用戶
-        UserDTO user = UserHolder.getUser();
-        if (user == null) {
-            return; // 未登錄, 不須判斷
-        }
-        Long userId = UserHolder.getUser().getId();
-        String key = RedisConstants.BLOG_LIKED_KEY + blog.getId();
-        Double score = stringRedisTemplate.opsForZSet().score(key, userId.toString());
-        blog.setIsLike(score != null);
-    }
-
     @Override
     public Result saveBlog(Blog blog) {
         // 取得登入用戶
@@ -179,4 +163,77 @@ public class BlogServiceImpl extends ServiceImpl<BlogMapper, Blog> implements IB
         return Result.ok(blog.getId());
     }
 
+    @Override
+    public Result queryBlogOfFollow(Long max, Integer offset) {
+        // 獲取當前用戶
+        Long userId = UserHolder.getUser().getId();
+
+        // 查詢收件箱(saveBlog redis中的zset)
+        String key = RedisConstants.FEED_KEY + userId;
+        Set<TypedTuple<String>> typedTuples = stringRedisTemplate.opsForZSet()
+                .reverseRangeByScoreWithScores(key, 0, max, offset, 2);
+
+        if (typedTuples == null || typedTuples.isEmpty()) {
+            return Result.ok();
+        }
+
+        // 解析數據, blogId, score/minTime(時間戳), offset
+        List<Long> ids = new ArrayList<>(typedTuples.size());
+        long minTime = 0;
+        int os = 1;
+
+        for (TypedTuple<String> tuple : typedTuples) {
+
+            // 獲取blogId
+            ids.add(Long.valueOf(tuple.getValue()));
+            // 獲取分數(時間戳)
+            long time = tuple.getScore().longValue();
+            // 判斷offset
+
+            if (time == minTime) {
+                os++;
+            } else {
+                minTime = time;
+                os = 1;
+            }
+        }
+
+        // 根據blogId查詢blog詳情
+        String idStr = StrUtil.join(",", ids);
+        List<Blog> blogs = query()
+                .in("id", ids).last("ORDER BY FIELD(id," + idStr + ")").list();
+
+        for (Blog blog : blogs) {
+            queryBlogUser(blog);
+            // 判斷是否被點讚
+            isBlogLiked(blog);
+        }
+
+        // 封裝並返回
+        ScrollResult r = new ScrollResult();
+        r.setList(blogs);
+        r.setMinTime(minTime);
+        r.setOffset(os);
+
+        return Result.ok(r);
+    }
+
+    private void queryBlogUser(Blog blog) {
+        Long userId = blog.getUserId();
+        User user = userService.getById(userId);
+        blog.setName(user.getNickName());
+        blog.setIcon(user.getIcon());
+    }
+
+    private void isBlogLiked(Blog blog) {
+        // 取得登錄用戶
+        UserDTO user = UserHolder.getUser();
+        if (user == null) {
+            return; // 未登錄, 不須判斷
+        }
+        Long userId = UserHolder.getUser().getId();
+        String key = RedisConstants.BLOG_LIKED_KEY + blog.getId();
+        Double score = stringRedisTemplate.opsForZSet().score(key, userId.toString());
+        blog.setIsLike(score != null);
+    }
 }
