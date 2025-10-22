@@ -17,6 +17,8 @@ import javax.annotation.Resource;
 import javax.servlet.http.HttpSession;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 
 /**
  * <p>
@@ -98,6 +100,11 @@ public class UserController {
 
         UserDTO userDTO = BeanUtil.copyProperties(user, UserDTO.class);
         return Result.ok(userDTO);
+    }
+
+    @PostMapping("/sign")
+    public Result sign() {
+        return userService.sign();
     }
 
 }
